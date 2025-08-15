@@ -1,0 +1,8 @@
+  .git
+  .secure
+  .venv
+  .vscode
+  cache
+  logs
+  .mylar_maintenance.db
+  mylar.db

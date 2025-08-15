@@ -1,40 +1,50 @@
-ARG BASE_VERSION=3.8.2-alpine3.11
-FROM python:${BASE_VERSION}
+
+FROM ghcr.io/linuxserver/unrar:latest as unrar
+FROM ghcr.io/linuxserver/baseimage-alpine:3.19
 
 # set version label
-ARG MYLAR_COMMIT=v0.3.0
-ARG ORG=mylar3
-LABEL version ${BASE_VERSION}_${MYLAR_COMMIT}
+LABEL version eric-local-1
 
 RUN \
-echo "**** install system packages ****" && \
- apk add --no-cache \
- git=2.24.3-r0 \
- # cfscrape dependecies
- nodejs=12.15.0-r1 \
- # unrar-cffi & Pillow dependencies
- build-base=0.5-r1 \
- # unar-cffi dependencies
- libffi-dev=3.2.1-r6 \
- # Pillow dependencies
- zlib-dev=1.2.11-r3 \
- jpeg-dev=8-r6
+  echo "**** install build dependencies ****" && \
+  apk add --no-cache --virtual=build-dependencies \
+    build-base \
+    jpeg-dev \
+    libffi-dev \
+    libwebp-dev \
+    python3-dev \
+    zlib-dev && \
+  echo "**** install runtime packages ****" && \
+  apk add --no-cache \
+    jpeg \
+    libwebp-tools \
+    nodejs \
+    python3 \
+    zlib
 
-# It might be better to check out release tags than python3-dev HEAD.
-# For development work I reccomend mounting a full git repo from the
-# docker host over /app/mylar.
-RUN echo "**** install app ****" && \
- git config --global advice.detachedHead false && \
- git clone https://github.com/${ORG}/mylar3.git --depth 1 --branch ${MYLAR_COMMIT} --single-branch /app/mylar
+COPY ./ /app/mylar3/
 
-RUN echo "**** install requirements ****" && \
- pip3 install --no-cache-dir -U -r /app/mylar/requirements.txt && \
- rm -rf ~/.cache/pip/*
+RUN \ 
+  echo "**** initialize mylar3 ****" && \
+  cd /app/mylar3 && \
+  python3 -m venv /lsiopy && \
+  pip install -U --no-cache-dir \
+    pip \
+    wheel && \
+  pip install --no-cache-dir --find-links https://wheel-index.linuxserver.io/alpine-3.19/ -r requirements.txt && \
+  echo "**** cleanup ****" && \
+  apk del --purge \
+    build-dependencies && \
+  rm -rf \
+    /root/.cache \
+    /tmp/*
 
-# TODO image could be further slimmed by moving python wheel building into a
-# build image and copying the results to the final image.
+# add local files
+COPY init-scripts/ /
+
+# add unrar
+COPY --from=unrar /usr/bin/unrar-alpine /usr/bin/unrar
 
 # ports and volumes
-VOLUME /config /comics /downloads
+VOLUME /config
 EXPOSE 8090
-CMD ["python3", "/app/mylar/Mylar.py", "--nolaunch", "--quiet", "--datadir", "/config/mylar"]
